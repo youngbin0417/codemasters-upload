@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GitHub Auto Saver</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Pretendard:wght@400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #21262d;
+    --border: #30363d;
+    --border-hover: #484f58;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --text-dim: #484f58;
+    --green: #3fb950;
+    --green-bg: #0d4429;
+    --green-border: #1a7f37;
+    --red: #f85149;
+    --red-bg: #3d1010;
+    --yellow: #d29922;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Pretendard', -apple-system, sans-serif;
+  }
+
+  body {
+    width: 304px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+  }
+
+  .header {
+    padding: 14px 14px 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo {
+    width: 28px;
+    height: 28px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+  }
+
+  .header-text h1 {
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--mono);
+  }
+
+  .header-text p {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+
+  .status-bar {
+    margin: 12px 14px 0;
+    padding: 8px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-family: var(--mono);
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    flex-shrink: 0;
+  }
+  .status-dot.connected { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.pending { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+  .status-dot.error { background: var(--red); }
+
+  .status-text { color: var(--text-muted); flex: 1; }
+
+  .body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+
+  .auth-box {
+    display: none;
+    padding: 10px;
+    border: 1px solid rgba(88, 166, 255, 0.35);
+    border-radius: 8px;
+    background: linear-gradient(180deg, rgba(88, 166, 255, 0.12), rgba(22, 27, 34, 0.92));
+  }
+
+  .auth-box.visible { display: block; }
+
+  .auth-code {
+    font-family: var(--mono);
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    color: #fff;
+  }
+
+  .auth-url {
+    margin-top: 4px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: #58a6ff;
+    word-break: break-all;
+  }
+
+  .hint {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    font-family: var(--mono);
+  }
+
+  .btn-row { display: flex; gap: 8px; }
+
+  button {
+    flex: 1;
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: var(--sans);
+    transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+  }
+
+  .primary {
+    background: #238636;
+    border: 1px solid var(--green-border);
+    color: #fff;
+  }
+  .primary:hover { background: #2ea043; }
+  .primary:active { transform: scale(0.98); }
+
+  .secondary {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+  .secondary:hover { border-color: var(--border-hover); color: var(--text); }
+
+  .last-save {
+    display: none;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .toast {
+    display: none;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: var(--mono);
+  }
+  .toast.success { display: block; background: var(--green-bg); border: 1px solid var(--green-border); color: var(--green); }
+  .toast.error { display: block; background: var(--red-bg); border: 1px solid #6e1a1a; color: var(--red); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">⚡</div>
+  <div class="header-text">
+    <h1>github-auto-saver</h1>
+    <p>aivle-codemasters 자동 저장</p>
+  </div>
+</div>
+
+<div class="status-bar">
+  <div class="status-dot" id="statusDot"></div>
+  <div class="status-text" id="statusText">GitHub 로그인 필요</div>
+</div>
+
+<div class="body">
+  <div class="auth-box" id="authBox">
+    <div class="auth-code" id="authCode">----</div>
+    <div class="auth-url" id="authUrl"></div>
+    <div class="hint" id="authHint">GitHub 승인 코드 입력 대기 중</div>
+  </div>
+
+  <div class="btn-row">
+    <button class="primary" id="btnLogin">GitHub 로그인</button>
+    <button class="secondary" id="btnLogout">로그아웃</button>
+  </div>
+
+  <div class="last-save" id="lastSave"></div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
