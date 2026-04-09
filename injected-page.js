@@ -125,7 +125,6 @@
           code,
           problemTitle: extractProblemTitle(payload),
           problemNumber: extractProblemNumber(payload),
-          problemText: extractProblemText(payload),
           timestamp: new Date().toISOString(),
           pageUrl: window.location.href,
         };
@@ -183,40 +182,8 @@
       '';
   }
 
-  function extractProblemText(payload) {
-    const problemBody = extractTextWithoutMedia(document.querySelector('.qitem_cn'));
-    const inputDescription = extractTextWithoutMedia(document.querySelector('article .txt_box .inpt_cn'));
-    const outputDescription = extractTextWithoutMedia(document.querySelector('article .txt_box .otpt_cn'));
-
-    return {
-      body: problemBody,
-      input: inputDescription,
-      output: outputDescription,
-    };
-  }
-
   function getQueryParam(name) {
     return new URL(window.location.href).searchParams.get(name);
-  }
-
-  function normalizeText(text) {
-    return text
-      .replace(/\r/g, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-  }
-
-  function extractTextWithoutMedia(root) {
-    if (!root) {
-      return '';
-    }
-
-    const clone = root.cloneNode(true);
-    clone.querySelectorAll('img, picture, source, figure, svg, canvas, video, audio, iframe, script, style, noscript').forEach((node) => {
-      node.remove();
-    });
-
-    return normalizeText(clone.innerText || '');
   }
 
   function reportSubmitState(status, message) {

@@ -179,7 +179,7 @@ async function handleSubmitSuccess(data) {
 }
 
 async function saveToGitHub(token, repo, data) {
-  const { language, code, problemTitle, problemNumber, problemText, pageUrl } = data;
+  const { language, code, problemTitle, problemNumber } = data;
   const ext = language === 'PYTHON' ? 'py' : language === 'JAVA' ? 'java' : 'txt';
   const folder = language === 'PYTHON' ? 'python' : language === 'JAVA' ? 'java' : 'other';
   const problemFolderName = buildProblemFilename(problemNumber, problemTitle);
@@ -188,27 +188,16 @@ async function saveToGitHub(token, repo, data) {
 
   const header = buildFileHeader(language, problemTitle, problemNumber, data.timestamp);
   const codeFilePath = `${baseDir}/${problemFolderName}.${ext}`;
-  const markdownFilePath = `${baseDir}/${problemFolderName}.md`;
 
   console.log(LOG_PREFIX, 'saving files', {
     repo: repo.fullName,
     codeFilePath,
-    markdownFilePath,
     branch,
   });
 
   const codeContent = `${header}\n${code}`;
-  const markdownContent = buildProblemMarkdown({
-    problemTitle,
-    problemNumber,
-    language,
-    problemText,
-    pageUrl,
-    timestamp: data.timestamp,
-  });
 
   await putRepoFile(token, repo.fullName, codeFilePath, branch, codeContent, `Solve: ${problemTitle} (${language})`);
-  await putRepoFile(token, repo.fullName, markdownFilePath, branch, markdownContent, `Docs: ${problemTitle}`);
 }
 
 async function getFileSha(apiUrl, token) {
@@ -557,50 +546,6 @@ function buildFileHeader(language, title, number, timestamp) {
   }
 
   return `// Problem: ${title} | Number: ${number} | Date: ${date}\n`;
-}
-
-function buildProblemMarkdown({ problemTitle, problemNumber, language, problemText, pageUrl, timestamp }) {
-  const details = normalizeProblemText(problemText);
-  const lines = [
-    `# ${problemTitle || '문제'}`,
-    '',
-    `- Number: ${problemNumber || '-'}`,
-    `- Saved: ${formatSavedAt(timestamp)}`,
-    `- Language: ${language || '-'}`,
-    `- Source: ${pageUrl || '-'}`,
-    '',
-    '## 문제 본문',
-    '',
-    details.body || '문제 본문을 추출하지 못했습니다.',
-  ];
-
-  if (details.input) {
-    lines.push('', '## 입력값 설명', '', details.input);
-  }
-
-  if (details.output) {
-    lines.push('', '## 출력값 설명', '', details.output);
-  }
-
-  lines.push('');
-
-  return lines.join('\n');
-}
-
-function normalizeProblemText(problemText) {
-  if (typeof problemText === 'string') {
-    return {
-      body: problemText.trim(),
-      input: '',
-      output: '',
-    };
-  }
-
-  return {
-    body: problemText?.body?.trim() || '',
-    input: problemText?.input?.trim() || '',
-    output: problemText?.output?.trim() || '',
-  };
 }
 
 function sanitizeFilename(name) {
