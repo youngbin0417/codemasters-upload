@@ -157,6 +157,8 @@
   }
   .secondary:hover { border-color: var(--border-hover); color: var(--text); }
 
+  .hidden { display: none; }
+
   .last-save {
     display: none;
     color: var(--text-dim);
@@ -220,7 +222,7 @@
 
   <div class="btn-row">
     <button class="primary" id="btnLogin">GitHub 로그인</button>
-    <button class="secondary" id="btnLogout">로그아웃</button>
+    <button class="secondary hidden" id="btnLogout">로그아웃</button>
   </div>
 
   <div class="sync-status" id="syncStatus"></div>

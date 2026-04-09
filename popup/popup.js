@@ -10,6 +10,8 @@ const authBox = $('authBox');
 const authCode = $('authCode');
 const authUrl = $('authUrl');
 const authHint = $('authHint');
+const btnLogin = $('btnLogin');
+const btnLogout = $('btnLogout');
 
 let currentAuthState = {
   authStatus: '',
@@ -88,6 +90,7 @@ function renderAuthState(state) {
 
   renderLastError(merged.lastErrorInfo);
   renderSyncStatus(merged.lastSyncMessage);
+  renderActionButtons(merged);
 
   if (merged.authStatus === 'connected' && merged.githubLogin) {
     clearLoginPolling();
@@ -153,6 +156,14 @@ function renderSyncStatus(message) {
 
   syncStatus.style.display = 'block';
   syncStatus.textContent = message;
+}
+
+function renderActionButtons(state) {
+  const isConnected = state.authStatus === 'connected' && Boolean(state.githubLogin);
+  const isPending = state.authStatus === 'pending';
+
+  btnLogin.classList.toggle('hidden', isConnected || isPending);
+  btnLogout.classList.toggle('hidden', !isConnected && !isPending);
 }
 
 $('btnLogin').addEventListener('click', async () => {

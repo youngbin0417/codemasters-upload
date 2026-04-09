@@ -164,29 +164,18 @@ async function handleSubmitSuccess(data) {
   console.log(LOG_PREFIX, 'access token exists', Boolean(token));
 
   if (!token) {
+    const { authStatus } = await chrome.storage.local.get(['authStatus']);
+    if (authStatus === 'pending') {
+      await queuePendingSubmission(data);
+      showNotification('⏳ GitHub 로그인 대기 중', '로그인 완료 후 방금 제출한 코드를 자동 저장합니다.');
+      return;
+    }
+
     showNotification('⚙️ GitHub 로그인 필요', '먼저 GitHub에 로그인한 뒤 다시 제출해주세요.');
     throw new Error('GitHub access token이 없습니다.');
   }
 
-  const repo = await resolveRepoContext(token);
-  console.log(LOG_PREFIX, 'repo resolved', repo);
-
-  try {
-    await saveToGitHub(token, repo, data);
-    const saveInfo = `${data.problemTitle} / ${data.language} / ${formatSavedAt(data.timestamp)}`;
-    await chrome.storage.sync.set({ lastSaveInfo: saveInfo });
-    await setLocalStorage({
-      lastSyncStatus: 'success',
-      lastSyncMessage: `${data.problemTitle} 저장 완료`,
-      lastErrorInfo: null,
-    });
-    showNotification('✅ GitHub 저장 완료', `${data.problemTitle} (${data.language}) 이(가) 저장되었습니다.`);
-  } catch (error) {
-    if (error.status === 401) {
-      await clearAuthState('GitHub 인증이 만료되었습니다. 다시 로그인해주세요.');
-    }
-    throw error;
-  }
+  await saveSubmissionWithToken(token, data);
 }
 
 async function saveToGitHub(token, repo, data) {
@@ -470,6 +459,7 @@ async function completeGitHubLogin(token) {
     lastErrorInfo: null,
   });
   showNotification('✅ GitHub 로그인 완료', `${profile.login} 계정으로 연결되었습니다.`);
+  await flushPendingSubmission(token);
 }
 
 async function getAccessToken() {
@@ -588,6 +578,60 @@ async function reportSaveFailure(error, data) {
     },
   });
   showNotification('❌ GitHub 저장 실패', message);
+}
+
+async function saveSubmissionWithToken(token, data) {
+  const repo = await resolveRepoContext(token);
+  console.log(LOG_PREFIX, 'repo resolved', repo);
+
+  try {
+    await saveToGitHub(token, repo, data);
+    const saveInfo = `${data.problemTitle} / ${data.language} / ${formatSavedAt(data.timestamp)}`;
+    await chrome.storage.sync.set({ lastSaveInfo: saveInfo });
+    await setLocalStorage({
+      lastSyncStatus: 'success',
+      lastSyncMessage: `${data.problemTitle} 저장 완료`,
+      lastErrorInfo: null,
+    });
+    showNotification('✅ GitHub 저장 완료', `${data.problemTitle} (${data.language}) 이(가) 저장되었습니다.`);
+  } catch (error) {
+    if (error.status === 401) {
+      await clearAuthState('GitHub 인증이 만료되었습니다. 다시 로그인해주세요.');
+    }
+    throw error;
+  }
+}
+
+async function queuePendingSubmission(data) {
+  console.log(LOG_PREFIX, 'queueing pending submission', {
+    problemTitle: data.problemTitle,
+    problemNumber: data.problemNumber,
+  });
+  await setLocalStorage({
+    pendingSubmission: data,
+    lastSyncStatus: 'waiting_auth',
+    lastSyncMessage: `${data.problemTitle} 로그인 완료 후 자동 저장 예정`,
+  });
+}
+
+async function flushPendingSubmission(token) {
+  const { pendingSubmission } = await chrome.storage.local.get(['pendingSubmission']);
+  if (!pendingSubmission) {
+    return;
+  }
+
+  console.log(LOG_PREFIX, 'flushing pending submission', {
+    problemTitle: pendingSubmission.problemTitle,
+    problemNumber: pendingSubmission.problemNumber,
+  });
+
+  await chrome.storage.local.remove(['pendingSubmission']);
+
+  try {
+    await saveSubmissionWithToken(token, pendingSubmission);
+  } catch (error) {
+    await reportSaveFailure(error, pendingSubmission);
+  }
 }
 
 function buildUserFriendlyError(error) {
