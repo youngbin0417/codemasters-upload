@@ -2,9 +2,12 @@ const REPO_NAME = 'aivle-codemasters';
 const DEFAULT_BRANCH = 'main';
 const API_VERSION = '2022-11-28';
 const DEVICE_SCOPES = 'repo read:user';
-const GITHUB_CLIENT_ID = "Ov23liO0j4uq5PWYmt9Q";
+const GITHUB_CLIENT_ID = "test_client_id";
+const LOG_PREFIX = '[GitHub Saver][background]';
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  console.log(LOG_PREFIX, 'message received', message.type, message.data || '');
+
   if (message.type === 'SUBMIT_SUCCESS') {
     handleSubmitSuccess(message.data)
       .then(() => sendResponse({ ok: true }))
@@ -72,6 +75,8 @@ async function startGitHubLogin() {
   if (!resolvedClientId) {
     throw new Error('GitHub Client ID가 설정되지 않았습니다.');
   }
+
+  console.log(LOG_PREFIX, 'starting GitHub login');
 
   await setLocalStorage({
     authStatus: 'pending',
@@ -142,6 +147,13 @@ async function logoutGitHub() {
 }
 
 async function handleSubmitSuccess(data) {
+  console.log(LOG_PREFIX, 'handleSubmitSuccess start', {
+    problemTitle: data.problemTitle,
+    problemNumber: data.problemNumber,
+    language: data.language,
+    codeLength: data.code?.length || 0,
+  });
+
   await setLocalStorage({
     lastErrorInfo: null,
     lastSyncStatus: 'saving',
@@ -149,6 +161,7 @@ async function handleSubmitSuccess(data) {
   });
 
   const token = await getAccessToken();
+  console.log(LOG_PREFIX, 'access token exists', Boolean(token));
 
   if (!token) {
     showNotification('⚙️ GitHub 로그인 필요', '먼저 GitHub에 로그인한 뒤 다시 제출해주세요.');
@@ -156,6 +169,7 @@ async function handleSubmitSuccess(data) {
   }
 
   const repo = await resolveRepoContext(token);
+  console.log(LOG_PREFIX, 'repo resolved', repo);
 
   try {
     await saveToGitHub(token, repo, data);
@@ -186,8 +200,10 @@ async function saveToGitHub(token, repo, data) {
   const fullContent = `${header}\n${code}`;
   const encoded = encodeBase64Utf8(fullContent);
   const apiUrl = `https://api.github.com/repos/${repo.fullName}/contents/${filePath}`;
+  console.log(LOG_PREFIX, 'saving file', { repo: repo.fullName, filePath, branch });
 
   const existingSha = await getFileSha(apiUrl, token);
+  console.log(LOG_PREFIX, 'existing sha', existingSha);
   const body = {
     message: `Solve: ${problemTitle} (${language})`,
     content: encoded,
@@ -202,6 +218,7 @@ async function saveToGitHub(token, repo, data) {
     method: 'PUT',
     body: JSON.stringify(body),
   });
+  console.log(LOG_PREFIX, 'save response status', res.status);
 
   if (!res.ok) {
     throw await githubError(res);
@@ -212,6 +229,7 @@ async function saveToGitHub(token, repo, data) {
 
 async function getFileSha(apiUrl, token) {
   const res = await githubFetch(apiUrl, token);
+  console.log(LOG_PREFIX, 'get file sha status', res.status, apiUrl);
   if (!res.ok) {
     if (res.status === 404) {
       return null;
@@ -225,6 +243,7 @@ async function getFileSha(apiUrl, token) {
 
 async function resolveAuthenticatedProfile(token) {
   const user = await githubJson('https://api.github.com/user', token);
+  console.log(LOG_PREFIX, 'authenticated profile', user.login);
   if (!user.login) {
     throw new Error('GitHub 사용자 정보를 가져오지 못했습니다.');
   }
@@ -240,9 +259,11 @@ async function resolveAuthenticatedProfile(token) {
 async function resolveRepoContext(token) {
   const profile = await resolveAuthenticatedProfile(token);
   const repoUrl = `https://api.github.com/repos/${profile.repoFullName}`;
+  console.log(LOG_PREFIX, 'resolving repo context', repoUrl);
 
   try {
     const repo = await githubJson(repoUrl, token);
+    console.log(LOG_PREFIX, 'repo already exists', repo.full_name);
     return {
       fullName: profile.repoFullName,
       defaultBranch: repo.default_branch || DEFAULT_BRANCH,
@@ -257,6 +278,7 @@ async function resolveRepoContext(token) {
     lastSyncStatus: 'creating_repo',
     lastSyncMessage: `${profile.repoFullName} 생성 중`,
   });
+  console.log(LOG_PREFIX, 'creating repo', profile.repoFullName);
 
   const created = await githubJson('https://api.github.com/user/repos', token, {
     method: 'POST',
@@ -275,6 +297,7 @@ async function resolveRepoContext(token) {
 }
 
 async function requestDeviceCode(clientId) {
+  console.log(LOG_PREFIX, 'requesting device code');
   const res = await fetch('https://github.com/login/device/code', {
     method: 'POST',
     headers: {
@@ -323,6 +346,10 @@ async function clearAuthState(message) {
 
 async function processPendingGitHubLogin() {
   const { deviceAuth, accessToken } = await chrome.storage.local.get(['deviceAuth', 'accessToken']);
+  console.log(LOG_PREFIX, 'processing pending login', {
+    hasDeviceAuth: Boolean(deviceAuth),
+    hasAccessToken: Boolean(accessToken),
+  });
 
   if (!deviceAuth || !deviceAuth.clientId || !deviceAuth.deviceCode) {
     await chrome.alarms.clear('github-login-poll');
@@ -394,6 +421,7 @@ async function processPendingGitHubLogin() {
 }
 
 async function githubJson(url, token, options = {}) {
+  console.log(LOG_PREFIX, 'githubJson request', options.method || 'GET', url);
   const res = await githubFetch(url, token, options);
   if (!res.ok) {
     throw await githubError(res);
@@ -402,6 +430,7 @@ async function githubJson(url, token, options = {}) {
 }
 
 async function githubFetch(url, token, options = {}) {
+  console.log(LOG_PREFIX, 'githubFetch', options.method || 'GET', url);
   const headers = {
     Accept: 'application/vnd.github+json',
     Authorization: `Bearer ${token}`,
@@ -419,6 +448,7 @@ async function githubFetch(url, token, options = {}) {
 
 async function githubError(res) {
   const data = await res.json().catch(() => ({}));
+  console.error(LOG_PREFIX, 'github error response', res.status, data);
   const error = new Error(data.message || `HTTP ${res.status}`);
   error.status = res.status;
   error.details = data;
@@ -427,6 +457,7 @@ async function githubError(res) {
 
 async function completeGitHubLogin(token) {
   const profile = await resolveAuthenticatedProfile(token);
+  console.log(LOG_PREFIX, 'login completed', profile.login);
   await setLocalStorage({
     accessToken: token,
     githubLogin: profile.login,
@@ -541,6 +572,12 @@ function formatSavedAt(timestamp) {
 
 async function reportSaveFailure(error, data) {
   const message = buildUserFriendlyError(error);
+  console.error(LOG_PREFIX, 'reportSaveFailure', {
+    rawMessage: error?.message,
+    status: error?.status,
+    userMessage: message,
+    problemTitle: data?.problemTitle || '',
+  });
   await setLocalStorage({
     lastSyncStatus: 'error',
     lastSyncMessage: message,

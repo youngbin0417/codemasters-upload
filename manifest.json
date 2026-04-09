@@ -28,6 +28,12 @@
       "run_at": "document_idle"
     }
   ],
+  "web_accessible_resources": [
+    {
+      "resources": ["injected-page.js"],
+      "matches": ["https://educodegenius.com/*"]
+    }
+  ],
   "background": {
     "service_worker": "background.js"
   },

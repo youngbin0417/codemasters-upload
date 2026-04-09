@@ -7,6 +7,7 @@ const githubClientId = process.env.GITHUB_CLIENT_ID;
 const includeFiles = new Set([
   'background.js',
   'content.js',
+  'injected-page.js',
   'manifest.json',
   'popup',
   'icons',
