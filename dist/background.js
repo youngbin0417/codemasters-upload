@@ -143,7 +143,7 @@ async function saveToGitHub(token, repo, data) {
   const { language, code, problemTitle, problemNumber } = data;
   const ext = language === 'PYTHON' ? 'py' : language === 'JAVA' ? 'java' : 'txt';
   const folder = language === 'PYTHON' ? 'python' : language === 'JAVA' ? 'java' : 'other';
-  const filePath = `${folder}/${sanitizeFilename(problemTitle)}.${ext}`;
+  const filePath = `${folder}/${buildProblemFilename(problemNumber, problemTitle)}.${ext}`;
   const branch = repo.defaultBranch || DEFAULT_BRANCH;
 
   const header = buildFileHeader(language, problemTitle, problemNumber, data.timestamp);
@@ -477,6 +477,17 @@ function sanitizeFilename(name) {
     .replace(/[\\/:*?"<>|]/g, '_')
     .replace(/\s+/g, '_')
     .slice(0, 80);
+}
+
+function buildProblemFilename(problemNumber, problemTitle) {
+  const safeNumber = sanitizeFilename(String(problemNumber || '').trim());
+  const safeTitle = sanitizeFilename(problemTitle || '문제');
+
+  if (safeNumber) {
+    return `${safeNumber}_${safeTitle}`;
+  }
+
+  return safeTitle;
 }
 
 function formatSavedAt(timestamp) {

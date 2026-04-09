@@ -71,8 +71,8 @@
 
       if (!code) return null;
 
+      const problemNumber = extractProblemNumber(payload);
       const problemTitle = extractProblemTitle(payload);
-      const problemNumber = payload.prctcExmplQitemsSn || getQueryParam('prctcExmplQitemsSn') || '';
 
       return {
         language,
@@ -89,19 +89,25 @@
   }
 
   function extractProblemTitle(payload) {
-    const eduTitle = getQueryParam('eduTitle');
-    if (eduTitle) {
-      return eduTitle;
+    if (payload?.problemTitle) {
+      return payload.problemTitle;
     }
 
-    if (payload?.eduTitle) {
-      return payload.eduTitle;
+    if (payload?.prctcExmplQitemsNm) {
+      return payload.prctcExmplQitemsNm;
+    }
+
+    if (payload?.title) {
+      return payload.title;
     }
 
     const selectors = [
+      '[data-problem-title]',
       '.problem-title',
       '.qitem-title',
       '.question-title',
+      '.qitem_tit',
+      '.question_tit',
       'h1.title',
       'h2.title',
       '.prctc-title',
@@ -118,7 +124,31 @@
       }
     }
 
+    const pageHeading = extractPageHeading();
+    if (pageHeading) {
+      return pageHeading;
+    }
+
     return document.title.trim() || '문제';
+  }
+
+  function extractProblemNumber(payload) {
+    return payload?.prctcExmplQitemsSn ||
+      payload?.problemNumber ||
+      getQueryParam('prctcExmplQitemsSn') ||
+      getQueryParam('num') ||
+      '';
+  }
+
+  function extractPageHeading() {
+    const headings = Array.from(document.querySelectorAll('h1, h2, h3'));
+    for (const heading of headings) {
+      const text = heading.textContent?.trim();
+      if (text && text !== getQueryParam('eduTitle')) {
+        return text;
+      }
+    }
+    return '';
   }
 
   function getQueryParam(name) {
