@@ -165,6 +165,14 @@
     line-height: 1.5;
   }
 
+  .sync-status {
+    display: none;
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
   .error-box {
     display: none;
     padding: 8px 10px;
@@ -215,6 +223,7 @@
     <button class="secondary" id="btnLogout">로그아웃</button>
   </div>
 
+  <div class="sync-status" id="syncStatus"></div>
   <div class="last-save" id="lastSave"></div>
   <div class="error-box" id="errorBox"></div>
   <div class="toast" id="toast"></div>

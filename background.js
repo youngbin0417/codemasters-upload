@@ -18,6 +18,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'SUBMIT_STATUS') {
+    setLocalStorage({
+      lastSyncStatus: message.data?.status || 'unknown',
+      lastSyncMessage: message.data?.message || '',
+    })
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message.type === 'SUBMIT_CAPTURE_FAILED') {
+    reportSaveFailure(new Error(message.data?.message || '제출 감지 실패'), {
+      problemTitle: '',
+    })
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
   if (message.type === 'GITHUB_LOGIN') {
     startGitHubLogin()
       .then(sendResponse)
@@ -116,6 +135,8 @@ async function logoutGitHub() {
     authError: null,
     deviceAuth: null,
     lastErrorInfo: null,
+    lastSyncStatus: 'idle',
+    lastSyncMessage: '',
   });
   showNotification('GitHub 연결 해제', '저장된 인증 정보를 삭제했습니다.');
 }

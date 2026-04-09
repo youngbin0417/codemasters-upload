@@ -5,6 +5,7 @@ const statusText = $('statusText');
 const toast = $('toast');
 const lastSave = $('lastSave');
 const errorBox = $('errorBox');
+const syncStatus = $('syncStatus');
 const authBox = $('authBox');
 const authCode = $('authCode');
 const authUrl = $('authUrl');
@@ -17,6 +18,7 @@ let currentAuthState = {
   deviceAuth: null,
   githubLogin: '',
   lastErrorInfo: null,
+  lastSyncMessage: '',
 };
 
 let loginPollTimer = null;
@@ -85,6 +87,7 @@ function renderAuthState(state) {
   const merged = currentAuthState;
 
   renderLastError(merged.lastErrorInfo);
+  renderSyncStatus(merged.lastSyncMessage);
 
   if (merged.authStatus === 'connected' && merged.githubLogin) {
     clearLoginPolling();
@@ -118,7 +121,7 @@ function renderAuthState(state) {
 async function loadState() {
   const [syncData, localData] = await Promise.all([
     chrome.storage.sync.get(['lastSaveInfo']),
-    chrome.storage.local.get(['authStatus', 'authMessage', 'authError', 'deviceAuth', 'githubLogin', 'lastErrorInfo']),
+    chrome.storage.local.get(['authStatus', 'authMessage', 'authError', 'deviceAuth', 'githubLogin', 'lastErrorInfo', 'lastSyncMessage']),
   ]);
 
   if (syncData.lastSaveInfo) {
@@ -139,6 +142,17 @@ function renderLastError(lastErrorInfo) {
   const problemTitle = lastErrorInfo.problemTitle ? `[${lastErrorInfo.problemTitle}] ` : '';
   errorBox.style.display = 'block';
   errorBox.textContent = `${problemTitle}${lastErrorInfo.message}`;
+}
+
+function renderSyncStatus(message) {
+  if (!message) {
+    syncStatus.style.display = 'none';
+    syncStatus.textContent = '';
+    return;
+  }
+
+  syncStatus.style.display = 'block';
+  syncStatus.textContent = message;
 }
 
 $('btnLogin').addEventListener('click', async () => {
@@ -187,6 +201,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     if (changes.deviceAuth) nextState.deviceAuth = changes.deviceAuth.newValue;
     if (changes.githubLogin) nextState.githubLogin = changes.githubLogin.newValue;
     if (changes.lastErrorInfo) nextState.lastErrorInfo = changes.lastErrorInfo.newValue;
+    if (changes.lastSyncMessage) nextState.lastSyncMessage = changes.lastSyncMessage.newValue;
 
     if (Object.keys(nextState).length > 0) {
       renderAuthState(nextState);

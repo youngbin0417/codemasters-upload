@@ -2,7 +2,7 @@ const REPO_NAME = 'aivle-codemasters';
 const DEFAULT_BRANCH = 'main';
 const API_VERSION = '2022-11-28';
 const DEVICE_SCOPES = 'repo read:user';
-const GITHUB_CLIENT_ID = "test_client_id";
+const GITHUB_CLIENT_ID = "Ov23liO0j4uq5PWYmt9Q";
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'SUBMIT_SUCCESS') {
@@ -15,6 +15,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
         sendResponse({ ok: false, error: error.message });
       });
+    return true;
+  }
+
+  if (message.type === 'SUBMIT_STATUS') {
+    setLocalStorage({
+      lastSyncStatus: message.data?.status || 'unknown',
+      lastSyncMessage: message.data?.message || '',
+    })
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+
+  if (message.type === 'SUBMIT_CAPTURE_FAILED') {
+    reportSaveFailure(new Error(message.data?.message || '제출 감지 실패'), {
+      problemTitle: '',
+    })
+      .then(() => sendResponse({ ok: true }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }
 
@@ -116,6 +135,8 @@ async function logoutGitHub() {
     authError: null,
     deviceAuth: null,
     lastErrorInfo: null,
+    lastSyncStatus: 'idle',
+    lastSyncMessage: '',
   });
   showNotification('GitHub 연결 해제', '저장된 인증 정보를 삭제했습니다.');
 }

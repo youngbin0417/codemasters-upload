@@ -5,6 +5,7 @@
 
   const originalOpen = XMLHttpRequest.prototype.open;
   const originalSend = XMLHttpRequest.prototype.send;
+  const originalFetch = window.fetch;
 
   XMLHttpRequest.prototype.open = function (method, url, ...args) {
     this._url = url;
@@ -17,32 +18,36 @@
       this._requestBody = body;
 
       this.addEventListener('load', function () {
-        try {
-          const response = JSON.parse(this.responseText);
-
-          if (response.result === true && response.code === 100) {
-            const payload = extractRequestPayload(this._requestBody);
-            const codeInfo = extractCodeFromEditor(payload);
-
-            if (codeInfo) {
-              chrome.runtime.sendMessage({
-                type: 'SUBMIT_SUCCESS',
-                data: codeInfo
-              });
-            }
-          }
-        } catch (e) {
-          console.error('[GitHub Saver] 응답 파싱 오류:', e);
-        }
+        handleSubmitResponse(this._url, this.responseText, this._requestBody);
       });
     }
 
     return originalSend.apply(this, [body]);
   };
 
+  window.fetch = async function (input, init) {
+    const url = typeof input === 'string' ? input : input?.url;
+    const requestBody = init?.body;
+    const response = await originalFetch.apply(this, [input, init]);
+
+    if (url && url.includes('/codingSubmit')) {
+      response.clone().text()
+        .then((text) => handleSubmitResponse(url, text, requestBody))
+        .catch((error) => {
+          console.error('[GitHub Saver] fetch 응답 파싱 오류:', error);
+          reportSubmitState('submit_error', '제출 응답을 읽지 못했습니다.');
+        });
+    }
+
+    return response;
+  };
+
   function extractRequestPayload(body) {
     try {
       if (!body) return {};
+      if (typeof body !== 'string') {
+        return {};
+      }
       const outer = JSON.parse(body);
       if (outer.param) return JSON.parse(outer.param);
       return outer;
@@ -86,6 +91,54 @@
       console.error('[GitHub Saver] 코드 추출 오류:', e);
       return null;
     }
+  }
+
+  function handleSubmitResponse(url, responseText, requestBody) {
+    try {
+      reportSubmitState('submit_detected', '제출 응답 감지됨');
+      const response = JSON.parse(responseText);
+
+      if (response.result === true && response.code === 100) {
+        const payload = extractRequestPayload(requestBody);
+        const codeInfo = extractCodeFromEditor(payload);
+
+        if (codeInfo) {
+          reportSubmitState('submit_success', `${codeInfo.problemTitle} 저장 요청 전송`);
+          chrome.runtime.sendMessage({
+            type: 'SUBMIT_SUCCESS',
+            data: codeInfo
+          });
+          return;
+        }
+
+        reportSubmitState('submit_error', '제출은 감지됐지만 코드 추출에 실패했습니다.');
+        chrome.runtime.sendMessage({
+          type: 'SUBMIT_CAPTURE_FAILED',
+          data: {
+            url,
+            message: '코드 추출 실패',
+          }
+        });
+        return;
+      }
+
+      reportSubmitState('submit_ignored', '제출 응답은 감지됐지만 성공 응답이 아닙니다.');
+    } catch (e) {
+      console.error('[GitHub Saver] 응답 파싱 오류:', e);
+      reportSubmitState('submit_error', '제출 응답 파싱에 실패했습니다.');
+    }
+  }
+
+  function reportSubmitState(status, message) {
+    chrome.runtime.sendMessage({
+      type: 'SUBMIT_STATUS',
+      data: {
+        status,
+        message,
+        pageUrl: window.location.href,
+        timestamp: new Date().toISOString(),
+      }
+    }).catch(() => {});
   }
 
   function extractProblemTitle(payload) {
