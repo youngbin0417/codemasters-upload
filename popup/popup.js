@@ -4,6 +4,7 @@ const statusDot = $('statusDot');
 const statusText = $('statusText');
 const toast = $('toast');
 const lastSave = $('lastSave');
+const errorBox = $('errorBox');
 const authBox = $('authBox');
 const authCode = $('authCode');
 const authUrl = $('authUrl');
@@ -15,6 +16,7 @@ let currentAuthState = {
   authError: '',
   deviceAuth: null,
   githubLogin: '',
+  lastErrorInfo: null,
 };
 
 let loginPollTimer = null;
@@ -82,6 +84,8 @@ function renderAuthState(state) {
 
   const merged = currentAuthState;
 
+  renderLastError(merged.lastErrorInfo);
+
   if (merged.authStatus === 'connected' && merged.githubLogin) {
     clearLoginPolling();
     setStatus('connected', `${merged.githubLogin} / aivle-codemasters 연결됨`);
@@ -114,7 +118,7 @@ function renderAuthState(state) {
 async function loadState() {
   const [syncData, localData] = await Promise.all([
     chrome.storage.sync.get(['lastSaveInfo']),
-    chrome.storage.local.get(['authStatus', 'authMessage', 'authError', 'deviceAuth', 'githubLogin']),
+    chrome.storage.local.get(['authStatus', 'authMessage', 'authError', 'deviceAuth', 'githubLogin', 'lastErrorInfo']),
   ]);
 
   if (syncData.lastSaveInfo) {
@@ -123,6 +127,18 @@ async function loadState() {
   }
 
   renderAuthState(localData);
+}
+
+function renderLastError(lastErrorInfo) {
+  if (!lastErrorInfo?.message) {
+    errorBox.style.display = 'none';
+    errorBox.textContent = '';
+    return;
+  }
+
+  const problemTitle = lastErrorInfo.problemTitle ? `[${lastErrorInfo.problemTitle}] ` : '';
+  errorBox.style.display = 'block';
+  errorBox.textContent = `${problemTitle}${lastErrorInfo.message}`;
 }
 
 $('btnLogin').addEventListener('click', async () => {
@@ -170,6 +186,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     if (changes.authError) nextState.authError = changes.authError.newValue;
     if (changes.deviceAuth) nextState.deviceAuth = changes.deviceAuth.newValue;
     if (changes.githubLogin) nextState.githubLogin = changes.githubLogin.newValue;
+    if (changes.lastErrorInfo) nextState.lastErrorInfo = changes.lastErrorInfo.newValue;
 
     if (Object.keys(nextState).length > 0) {
       renderAuthState(nextState);

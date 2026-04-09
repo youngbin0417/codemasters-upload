@@ -10,6 +10,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .then(() => sendResponse({ ok: true }))
       .catch((error) => {
         console.error('[GitHub Saver] 자동 저장 실패:', error);
+        reportSaveFailure(error, message.data).catch((reportError) => {
+          console.error('[GitHub Saver] 실패 알림 저장 실패:', reportError);
+        });
         sendResponse({ ok: false, error: error.message });
       });
     return true;
@@ -112,11 +115,18 @@ async function logoutGitHub() {
     authMessage: 'GitHub 로그아웃 완료',
     authError: null,
     deviceAuth: null,
+    lastErrorInfo: null,
   });
   showNotification('GitHub 연결 해제', '저장된 인증 정보를 삭제했습니다.');
 }
 
 async function handleSubmitSuccess(data) {
+  await setLocalStorage({
+    lastErrorInfo: null,
+    lastSyncStatus: 'saving',
+    lastSyncMessage: `${data.problemTitle} 저장 준비 중`,
+  });
+
   const token = await getAccessToken();
 
   if (!token) {
@@ -130,6 +140,11 @@ async function handleSubmitSuccess(data) {
     await saveToGitHub(token, repo, data);
     const saveInfo = `${data.problemTitle} / ${data.language} / ${formatSavedAt(data.timestamp)}`;
     await chrome.storage.sync.set({ lastSaveInfo: saveInfo });
+    await setLocalStorage({
+      lastSyncStatus: 'success',
+      lastSyncMessage: `${data.problemTitle} 저장 완료`,
+      lastErrorInfo: null,
+    });
     showNotification('✅ GitHub 저장 완료', `${data.problemTitle} (${data.language}) 이(가) 저장되었습니다.`);
   } catch (error) {
     if (error.status === 401) {
@@ -216,6 +231,11 @@ async function resolveRepoContext(token) {
       throw error;
     }
   }
+
+  await setLocalStorage({
+    lastSyncStatus: 'creating_repo',
+    lastSyncMessage: `${profile.repoFullName} 생성 중`,
+  });
 
   const created = await githubJson('https://api.github.com/user/repos', token, {
     method: 'POST',
@@ -395,6 +415,7 @@ async function completeGitHubLogin(token) {
     authMessage: `${profile.login} 로그인 완료`,
     authError: null,
     deviceAuth: null,
+    lastErrorInfo: null,
   });
   showNotification('✅ GitHub 로그인 완료', `${profile.login} 계정으로 연결되었습니다.`);
 }
@@ -495,6 +516,50 @@ function formatSavedAt(timestamp) {
     dateStyle: 'medium',
     timeStyle: 'short',
   });
+}
+
+async function reportSaveFailure(error, data) {
+  const message = buildUserFriendlyError(error);
+  await setLocalStorage({
+    lastSyncStatus: 'error',
+    lastSyncMessage: message,
+    lastErrorInfo: {
+      message,
+      problemTitle: data?.problemTitle || '',
+      timestamp: new Date().toISOString(),
+    },
+  });
+  showNotification('❌ GitHub 저장 실패', message);
+}
+
+function buildUserFriendlyError(error) {
+  const rawMessage = error?.message || '알 수 없는 오류가 발생했습니다.';
+
+  if (error?.status === 401) {
+    return 'GitHub 인증이 만료되었습니다. 다시 로그인해주세요.';
+  }
+
+  if (error?.status === 403) {
+    return 'GitHub 권한이 부족하거나 API 제한에 걸렸습니다.';
+  }
+
+  if (error?.status === 404) {
+    return 'GitHub 저장소를 찾지 못했습니다.';
+  }
+
+  if (/Bad credentials/i.test(rawMessage)) {
+    return 'GitHub 인증 정보가 올바르지 않습니다. 다시 로그인해주세요.';
+  }
+
+  if (/Resource not accessible by integration/i.test(rawMessage)) {
+    return 'GitHub 저장소 생성 또는 파일 저장 권한이 부족합니다.';
+  }
+
+  if (/name already exists/i.test(rawMessage)) {
+    return '같은 이름의 GitHub 저장소가 이미 존재하지만 접근할 수 없습니다.';
+  }
+
+  return rawMessage;
 }
 
 function showNotification(title, message) {
