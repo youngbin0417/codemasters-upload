@@ -2,7 +2,7 @@ const REPO_NAME = 'aivle-codemasters';
 const DEFAULT_BRANCH = 'main';
 const API_VERSION = '2022-11-28';
 const DEVICE_SCOPES = 'repo read:user';
-const GITHUB_CLIENT_ID = "test_client_id";
+const GITHUB_CLIENT_ID = "Ov23liO0j4uq5PWYmt9Q";
 const LOG_PREFIX = '[GitHub Saver][background]';
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -179,41 +179,36 @@ async function handleSubmitSuccess(data) {
 }
 
 async function saveToGitHub(token, repo, data) {
-  const { language, code, problemTitle, problemNumber } = data;
+  const { language, code, problemTitle, problemNumber, problemText, pageUrl } = data;
   const ext = language === 'PYTHON' ? 'py' : language === 'JAVA' ? 'java' : 'txt';
   const folder = language === 'PYTHON' ? 'python' : language === 'JAVA' ? 'java' : 'other';
-  const filePath = `${folder}/${buildProblemFilename(problemNumber, problemTitle)}.${ext}`;
+  const problemFolderName = buildProblemFilename(problemNumber, problemTitle);
+  const baseDir = `${folder}/${problemFolderName}`;
   const branch = repo.defaultBranch || DEFAULT_BRANCH;
 
   const header = buildFileHeader(language, problemTitle, problemNumber, data.timestamp);
-  const fullContent = `${header}\n${code}`;
-  const encoded = encodeBase64Utf8(fullContent);
-  const apiUrl = `https://api.github.com/repos/${repo.fullName}/contents/${filePath}`;
-  console.log(LOG_PREFIX, 'saving file', { repo: repo.fullName, filePath, branch });
+  const codeFilePath = `${baseDir}/${problemFolderName}.${ext}`;
+  const markdownFilePath = `${baseDir}/${problemFolderName}.md`;
 
-  const existingSha = await getFileSha(apiUrl, token);
-  console.log(LOG_PREFIX, 'existing sha', existingSha);
-  const body = {
-    message: `Solve: ${problemTitle} (${language})`,
-    content: encoded,
+  console.log(LOG_PREFIX, 'saving files', {
+    repo: repo.fullName,
+    codeFilePath,
+    markdownFilePath,
     branch,
-  };
-
-  if (existingSha) {
-    body.sha = existingSha;
-  }
-
-  const res = await githubFetch(apiUrl, token, {
-    method: 'PUT',
-    body: JSON.stringify(body),
   });
-  console.log(LOG_PREFIX, 'save response status', res.status);
 
-  if (!res.ok) {
-    throw await githubError(res);
-  }
+  const codeContent = `${header}\n${code}`;
+  const markdownContent = buildProblemMarkdown({
+    problemTitle,
+    problemNumber,
+    language,
+    problemText,
+    pageUrl,
+    timestamp: data.timestamp,
+  });
 
-  return res.json();
+  await putRepoFile(token, repo.fullName, codeFilePath, branch, codeContent, `Solve: ${problemTitle} (${language})`);
+  await putRepoFile(token, repo.fullName, markdownFilePath, branch, markdownContent, `Docs: ${problemTitle}`);
 }
 
 async function getFileSha(apiUrl, token) {
@@ -228,6 +223,35 @@ async function getFileSha(apiUrl, token) {
 
   const data = await res.json();
   return data.sha || null;
+}
+
+async function putRepoFile(token, repoFullName, filePath, branch, content, message) {
+  const apiUrl = `https://api.github.com/repos/${repoFullName}/contents/${filePath}`;
+  const encoded = encodeBase64Utf8(content);
+  const existingSha = await getFileSha(apiUrl, token);
+  console.log(LOG_PREFIX, 'existing sha', existingSha, filePath);
+
+  const body = {
+    message,
+    content: encoded,
+    branch,
+  };
+
+  if (existingSha) {
+    body.sha = existingSha;
+  }
+
+  const res = await githubFetch(apiUrl, token, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+  console.log(LOG_PREFIX, 'save response status', res.status, filePath);
+
+  if (!res.ok) {
+    throw await githubError(res);
+  }
+
+  return res.json();
 }
 
 async function resolveAuthenticatedProfile(token) {
@@ -533,6 +557,50 @@ function buildFileHeader(language, title, number, timestamp) {
   }
 
   return `// Problem: ${title} | Number: ${number} | Date: ${date}\n`;
+}
+
+function buildProblemMarkdown({ problemTitle, problemNumber, language, problemText, pageUrl, timestamp }) {
+  const details = normalizeProblemText(problemText);
+  const lines = [
+    `# ${problemTitle || '문제'}`,
+    '',
+    `- Number: ${problemNumber || '-'}`,
+    `- Saved: ${formatSavedAt(timestamp)}`,
+    `- Language: ${language || '-'}`,
+    `- Source: ${pageUrl || '-'}`,
+    '',
+    '## 문제 본문',
+    '',
+    details.body || '문제 본문을 추출하지 못했습니다.',
+  ];
+
+  if (details.input) {
+    lines.push('', '## 입력값 설명', '', details.input);
+  }
+
+  if (details.output) {
+    lines.push('', '## 출력값 설명', '', details.output);
+  }
+
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+function normalizeProblemText(problemText) {
+  if (typeof problemText === 'string') {
+    return {
+      body: problemText.trim(),
+      input: '',
+      output: '',
+    };
+  }
+
+  return {
+    body: problemText?.body?.trim() || '',
+    input: problemText?.input?.trim() || '',
+    output: problemText?.output?.trim() || '',
+  };
 }
 
 function sanitizeFilename(name) {
